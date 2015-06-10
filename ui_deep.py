@@ -55,7 +55,8 @@ class pop_logcat(threading.Thread):
 
     def run(self):
          # add any command line arguments here.
-        process = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '|', 'grep', "My"],
+        # process = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '|', 'grep', "My"],
+        process = subprocess.Popen(['adb', 'logcat'],
                 stdout=subprocess.PIPE)
 
         # Launch the asynchronous readers of the process' stdout.
@@ -80,10 +81,10 @@ class pop_logcat(threading.Thread):
                     #print 'logcat backup \n' + log_backup
                      # clear logcat
         stdout_reader.join()
-        subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '-c'],
-                                 stdout=subprocess.PIPE)
+        #subprocess.Popen(['adb', 'logcat', '-c'],
+         #                        stdout=subprocess.PIPE)
+        os.system('adb logcat -c')
         return
-
 
 def nodelist_redef(nodelist):
     # only retrieve GUI components belong to target pkg
@@ -188,10 +189,11 @@ def handle_stop_activity(node):
 def check_clicked(clicked_list):
     global back_counter
     global dev
-    os.system('adb start-server')
+    #os.system('adb start-server')
+    #from uiautomator import device as dev
     #time.sleep(5)
-    from uiautomator import device as dev
-    dev.info
+    #dev.info
+
     # dump ui hierarchy into a xml file and extract info from it
     ISOTIMEFORMAT = '%m%d-%H-%M-%S'
     global current_time, nodelist
@@ -210,6 +212,7 @@ def check_clicked(clicked_list):
     nodelist = nodelist_redef(nodelist)
     for i in nodelist:
         if i not in clicked_list:
+            ui_interaction(i)
             return nodelist
     dev.press.back()
     global flag_back
@@ -221,50 +224,51 @@ def check_clicked(clicked_list):
 back_counter = 0
 flag_back = False
 
-def ui_interaction():
+def ui_interaction(node):
     global current_window, nodelist
     global flag_start_activity, flag_stop_activity, flag_start_logcat, flag_back
         #if not check_subset(current_window, nodelist):
          #   if not check_subset(nodelist, current_window):
           #      return False
     current_window = nodelist
-    for i in range(len(nodelist)):
-        node = nodelist[i]
-        if node[5] == 'true':
-            arg = get_selector_attributes(node)
-            if node not in clicked_list:
-                # perform click
-                cmd = 'CLICK'
-                print arg
-                # start logcat
-                flag_start_logcat = True
-                CMD_MAP[cmd](dev, arg)
-                clicked_list.append(node)
-                print 'click ' + ' at ' + current_time
-                # dev.wait.idle()
-                pop_logcat_starter = pop_logcat()
-                pop_logcat_starter.start()
-                time.sleep(6)  # wait 30 secs more to retrieve all asked permission
-                flag_start_logcat = False
-                pop_logcat_starter.join()
-                if flag_start_activity:
-                    # save_node = handle_start_activity(node)
-                    print save_node
-                    flag_start_activity = False
-                if flag_stop_activity:
-                    # handle_stop_activity(save_node)
-                    print save_node
-                    flag_stop_activity = False
-                return True
+    arg = get_selector_attributes(node)
+    if node not in clicked_list:
+        # perform click
+        cmd = 'CLICK'
+        print arg
+        # start logcat
+        flag_start_logcat = True
+        CMD_MAP[cmd](dev, arg)
+        clicked_list.append(node)
+        print 'click ' + ' at ' + current_time
+        # dev.wait.idle()
+        pop_logcat_starter = pop_logcat()
+        pop_logcat_starter.start()
+        time.sleep(6)  # wait 30 secs more to retrieve all asked permission, at least 6 secs
+        flag_start_logcat = False
+        tictmp = time.clock()
+        #pop_logcat_starter.join()
+        toctmp = time.clock()
+        print 'join:'
+        #print toctmp - tictmp
+        print 'hehe'
+        if flag_start_activity:
+            # save_node = handle_start_activity(node)
+            print save_node
+            flag_start_activity = False
+        if flag_stop_activity:
+            # handle_stop_activity(save_node)
+            print save_node
+            flag_stop_activity = False
+        return
     # dev.swipe()  # swipe from left to right to cover the case like Wechat
     dev.press.back()  # press back when all clickable have been clicked
     flag_back = False
-    return True
 
 flag_start_activity = False
 flag_start_logcat = False
 flag_stop_activity = False
-package = 'com.android.dialer'
+package = 'com.android.deskclock'
 save_node = None
 #line = ''
 visted_activities = []
@@ -274,24 +278,16 @@ visted_activities = []
 clicked_list = []
 current_window = []
 nodelist = []
+tic = time.clock()
 # per activity (not necessary a new activity, new updated window is enough)
 while check_clicked(clicked_list) or back_counter <= 5:
+    toc = time.clock()
+    print toc - tic
+    tic = time.clock()
     if flag_back:
         flag_back = False
         continue
-    ui_interaction()
-
-
-
-
-
-
-
-
-
-
-
-
+    pass
 
 
 

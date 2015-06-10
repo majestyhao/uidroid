@@ -95,7 +95,6 @@ def check_clicked(clicked_list):
     dev.dump("./data/" + current_time + "hierarchy.xml")
     # dev.screenshot("./data/" + current_time + ".png")
     dom = xml.dom.minidom.parse("./data/" + current_time + "hierarchy.xml")
-
     global flag_start_logcat
     global flag_start_activity
     global flag_destroy_activity
@@ -106,34 +105,37 @@ def check_clicked(clicked_list):
     nodelist = nodelist_redef(nodelist)
     for i in nodelist:
         if i not in clicked_list:
+            ui_interaction(i)
             return nodelist
+    dev.press.back()
+    global flag_back, back_counter
+    flag_back = True
+    print "back2"
+    back_counter += 1
     return []
 
 
-def ui_interaction():
+def ui_interaction(node):
         global current_window
         global nodelist
         #if not check_subset(current_window, nodelist):
          #   if not check_subset(nodelist, current_window):
           #      return False
         current_window = nodelist
-        for i in range(len(nodelist)):
-            node = nodelist[i]
-            if node[5] == 'true':
-                arg = get_selector_attributes(node)
-                if node not in clicked_list:
+        arg = get_selector_attributes(node)
+        if node not in clicked_list:
                     #pop_logcat_starter = pop_logcat()
                     #pop_logcat_starter.start()
                     # perform click
-                    cmd = 'CLICK'
-                    print arg
-                    # start logcat
-                    flag_start_logcat = True
-                    CMD_MAP[cmd](dev, arg)
-                    clicked_list.append(node)
-                    print 'click ' + node[1] + ' at ' + current_time
-                    dev.wait.idle()
-                    time.sleep(1)  # wait 30 secs more to retrieve all asked permission
+                cmd = 'CLICK'
+                print arg
+                # start logcat
+                flag_start_logcat = True
+                CMD_MAP[cmd](dev, arg)
+                clicked_list.append(node)
+                print 'click ' + node[1] + ' at ' + current_time
+                # dev.wait.idle()
+                # time.sleep(1)  # wait 30 secs more to retrieve all asked permission
                 # flag_start_logcat = False
                 # pop_logcat_starter.join()
                 # if flag_start_activity:
@@ -144,16 +146,17 @@ def ui_interaction():
                 #     handle_destroy_activity(save_node)
                 #     print save_node
                 #     flag_destroy_activity = False
-                    return True
+                return
         # dev.swipe()  # swipe from left to right to cover the case like Wechat
         dev.press.back()  # press back when all clickable have been clicked
-        return True
 
-package = 'com.android.deskclock'
+package = 'com.google.android.deskclock'
 # do ui interactions
 clicked_list = []
 current_window = []
 nodelist = []
+back_counter = 0
 # per activity (not necessary a new activity, new updated window is enough)
-while check_clicked(clicked_list):
-    ui_interaction()
+while check_clicked(clicked_list) or back_counter <= 5:
+    pass
+    #ui_interaction()
