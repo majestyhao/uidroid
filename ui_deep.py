@@ -232,6 +232,8 @@ def ui_interaction(node):
           #      return False
     current_window = nodelist
     arg = get_selector_attributes(node)
+    if not dev(**arg).exists: # just in case...e.g text changes frequently
+            return
     if node not in clicked_list:
         # perform click
         cmd = 'CLICK'

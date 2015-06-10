@@ -23,8 +23,7 @@ def nodelist_redef(nodelist):
     # only retrieve GUI components belong to target pkg
     # and only interested attributes enough to figure out the unique one
     nodelist_new = []
-    tmpnode = []
-    tmpi = []
+    #tmpi = []
     for i in range(len(nodelist)):
         node = nodelist[i]
         if node.getAttribute('clickable') == 'true':
@@ -42,16 +41,18 @@ def nodelist_redef(nodelist):
             if node_package == package:
                 node = [node_text, node_contentdesc,
                     node_class, node_resid, node_package, node_clickable,
-                        node_bounds, node_index]
+                        node_bounds, node_index] # add width property
                 nodelist_new.append(node)
-                if node_class == 'android.app.ActionBar$Tab':
-                    tmpnode.append(node)
-                    tmpi.append(len(nodelist_new) - 1)
-    nodelist_length = len(nodelist_new)
-    for i in range(len(tmpi)):
-        index = tmpi[i]
-        nodelist_new[index] = nodelist_new[nodelist_length - i - 1]
-        nodelist_new[nodelist_length - i - 1] = tmpnode[i]
+    #             if node_class == 'android.app.ActionBar$Tab':
+    #                 #tmpnode.append(node) # transmit address not value
+    #                 tmpi.append(len(nodelist_new) - 1)
+    # nodelist_length = len(nodelist_new)
+    # for i in range(len(tmpi)):
+    #     print nodelist_length - i - 1, i
+    #     index = tmpi[i]
+    #     tmpnode = nodelist_new[nodelist_length - i - 1]
+    #     nodelist_new[nodelist_length - i - 1] = nodelist_new[index]
+    #     nodelist_new[index] = tmpnode
     return nodelist_new
 
 def get_selector_attributes(node):
@@ -70,27 +71,56 @@ def get_selector_attributes(node):
     attributes['index'] = node[7]
     return attributes
 
-def check_subset(a, b):
+def judge_click_attributes(node):
+    newnode = []
+    newnode.append(node[6])  # bounds
+    newnode.append(node[2])
+    newnode.append(node[3])
+    # newnode.append(node[1])
+    return newnode
+
+
+def is_subset(a, b):
     if not a:
         return True
-    c = []
-    for i in b:
-        #if i[3]:
-        c.append(i[6])
-    print 'damn:'
-    print c
     for i in a:
-        if a not in b:
-            if i[6] in c:
-                continue
-            print i
-            return False
+        if i not in b:
+           return False
     return True
 
-def check_clicked(clicked_list):
-     # dump ui hierarchy into a xml file and extract info from it
+def nodelist_judge_redef(nodelist):
+    nodelist_judge = []
+    for node in nodelist:
+        nodelist_judge.append(judge_click_attributes(node))
+    return nodelist_judge
+
+
+def is_new_window(prior_window, nodelist):
+    if not is_subset(prior_window, nodelist) \
+            and not is_subset(nodelist, prior_window):
+        return len(nodelist)
+    else:
+        return 1
+
+def is_circle(node):
+    if len(clicked_seq) - 2 < 0:
+        return  False
+    priprinode = clicked_seq[len(clicked_seq) - 2]
+    print 'pripri:'
+    print priprinode
+    if priprinode != node:
+        return False
+    else:
+        return True
+
+def check_clicked():
+    # dump ui hierarchy into a xml file and extract info from it
     ISOTIMEFORMAT = '%m%d-%H-%M-%S'
-    global current_time, nodelist
+    global clicked_list, clicked_seq, clicked_list_width, prior_window
+    global tic, toc, current_time
+    tic = toc
+    toc = time.clock()
+    print toc - tic
     current_time = time.strftime(ISOTIMEFORMAT, time.localtime())
     dev.dump("./data/" + current_time + "hierarchy.xml")
     # dev.screenshot("./data/" + current_time + ".png")
@@ -99,64 +129,102 @@ def check_clicked(clicked_list):
     global flag_start_activity
     global flag_destroy_activity
 
-    # 得到xml文档元素对象
+    # retrieve xml elements
     root = dom.documentElement
     nodelist = root.getElementsByTagName('node')
     nodelist = nodelist_redef(nodelist)
+    current_window = nodelist_judge_redef(nodelist)
+    # num of nodes at new window is the width of the parent node
+    width = is_new_window(prior_window, current_window)
+    prior_window = current_window
+    #print width
+    prinode_index = -1
+    if len(clicked_seq) > 0:
+        prinode = clicked_seq[len(clicked_seq) - 1]
+        if prinode != -1:
+            prinode_index = clicked_list.index(prinode)
+    if width > 1:
+        if prinode == -1:
+            print 'ffffffffffffffffback'
+
+        if prinode != -1 and clicked_list_width[prinode_index] != -1:
+            clicked_list_width[prinode_index] = width
+
+    print clicked_list_width
     for i in nodelist:
-        if i not in clicked_list:
+        node = judge_click_attributes(i)
+        # if i[2] == 'android.app.ActionBar$Tab':
+        #     print i[2]
+        #     print i[7]
+
+        if node in clicked_list:
+            node_index = clicked_list.index(node)
+            if clicked_list_width[node_index] > 0:
+                if is_circle(node):
+                    if prinode != -1 and prinode_index != -1:
+                        clicked_list_width[prinode_index] = -1
+                        print 'oa'
+                clicked_list_width[node_index] -= 1
+                clicked_seq.append(node)
+                ui_interaction(i)
+                print 'what!!!!!!!!!!!!!!!!!!'
+                return True
+        else:
+            clicked_seq.append(node)
+            print node
+            clicked_list.append(node)
+            clicked_list_width.append(0)
             ui_interaction(i)
-            return nodelist
+            return True
+    clicked_seq.append(-1)
     dev.press.back()
     global flag_back, back_counter
     flag_back = True
     print "back2"
     back_counter += 1
-    return []
+    return False
 
 
 def ui_interaction(node):
-        global current_window
-        global nodelist
-        #if not check_subset(current_window, nodelist):
-         #   if not check_subset(nodelist, current_window):
-          #      return False
-        current_window = nodelist
-        arg = get_selector_attributes(node)
-        if node not in clicked_list:
-                    #pop_logcat_starter = pop_logcat()
-                    #pop_logcat_starter.start()
-                    # perform click
-                cmd = 'CLICK'
-                print arg
-                # start logcat
-                flag_start_logcat = True
-                CMD_MAP[cmd](dev, arg)
-                clicked_list.append(node)
-                print 'click ' + node[1] + ' at ' + current_time
-                # dev.wait.idle()
-                # time.sleep(1)  # wait 30 secs more to retrieve all asked permission
-                # flag_start_logcat = False
-                # pop_logcat_starter.join()
-                # if flag_start_activity:
-                #     save_node = handle_start_activity(node)
-                #     print save_node
-                #     flag_start_activity = False
-                # if flag_destroy_activity:
-                #     handle_destroy_activity(save_node)
-                #     print save_node
-                #     flag_destroy_activity = False
-                return
-        # dev.swipe()  # swipe from left to right to cover the case like Wechat
-        dev.press.back()  # press back when all clickable have been clicked
+    arg = get_selector_attributes(node)
+    if not dev(**arg).exists:
+        return
+    #pop_logcat_starter = pop_logcat()
+    #pop_logcat_starter.start()
+    # perform click
+    cmd = 'CLICK'
+    print arg
+    # start logcat
+    #flag_start_logcat = True
+    CMD_MAP[cmd](dev, arg)
+    print 'click ' + node[2] + ' at ' + current_time
+    # dev.wait.idle()
+    # time.sleep(1)  # wait 30 secs more to retrieve all asked permission
+    # flag_start_logcat = False
+    # pop_logcat_starter.join()
+    # if flag_start_activity:
+    #     save_node = handle_start_activity(node)
+    #     print save_node
+    #     flag_start_activity = False
+    # if flag_destroy_activity:
+    #     handle_destroy_activity(save_node)
+    #     print save_node
+    #     flag_destroy_activity = False
+    # dev.swipe()  # swipe from left to right to cover the case like Wechat
+    #dev.press.back()  # press back when all clickable have been clicked
 
 package = 'com.google.android.deskclock'
+#package = 'com.android.dialer'
+#package = 'com.android.settings'
 # do ui interactions
 clicked_list = []
-current_window = []
+clicked_seq = []
+prior_window = []
 nodelist = []
 back_counter = 0
+clicked_list_width = []
+toc = time.clock()
 # per activity (not necessary a new activity, new updated window is enough)
-while check_clicked(clicked_list) or back_counter <= 5:
+while check_clicked() or back_counter <= 5:
     pass
     #ui_interaction()
