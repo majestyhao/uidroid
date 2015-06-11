@@ -94,7 +94,11 @@ def is_new_window(nodelist):
             if prinode_index not in window_node_map:
                 tmpcounter = 0
                 for i in nodelist:
-                    if i not in clicked_list:
+                    if i in clicked_list:
+                        node_index = clicked_list.index(i)
+                        if clicked_list_width[node_index] > 0:
+                            tmpcounter += 1
+                    else:
                         tmpcounter += 1
                 clicked_list_width[prinode_index] = tmpcounter
                 window_visted.append(tmp)
@@ -159,7 +163,6 @@ def check_clicked():
             return True
     if parent > 0:
         clicked_list_width[parent] = 0
-        return False
     clicked_seq.append(-1)
     dev.press.back()
     global back_counter
