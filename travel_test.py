@@ -78,9 +78,11 @@ def nodelist_judge_redef(nodelist):
 def hash_window(nodelist):
     return hash(str(nodelist))
 
-def is_new_window(nodelist):
+def is_new_window():
     global window_visted, window_node_map, same_window_counter
-    tmp = hash_window(nodelist)
+    global nodelist
+    current_window = nodelist_judge_redef(nodelist)
+    tmp = hash_window(current_window)
     if not window_visted:
         window_visted.append(tmp)
         window_node_map.append(-1)
@@ -93,16 +95,24 @@ def is_new_window(nodelist):
             prinode_index = clicked_list.index(prinode)
             if prinode_index not in window_node_map:
                 tmpcounter = 0
-                for i in nodelist:
+                tnodelist = []
+                tmpc = 0
+                for i in current_window:
                     if i in clicked_list:
                         node_index = clicked_list.index(i)
                         if clicked_list_width[node_index] > 0:
                             tmpcounter += 1
+                            tnodelist.append(nodelist[tmpc])
+                            print i
                     else:
                         tmpcounter += 1
+                        tnodelist.append(nodelist[tmpc])
+                        print i
+                    tmpc += 1
                 clicked_list_width[prinode_index] = tmpcounter
                 window_visted.append(tmp)
                 window_node_map.append(prinode_index)
+                nodelist = tnodelist
                 print 'NEEEEEEEEEEEEEEEEEEEEEEEW WINDDDDDDDDDDDDDDDDDDDOW'
                 return prinode_index
     else:
@@ -115,7 +125,7 @@ def check_clicked():
     # dump ui hierarchy into a xml file and extract info from it
     ISOTIMEFORMAT = '%m%d-%H-%M-%S'
     global clicked_list, clicked_seq, clicked_list_width
-    global current_time
+    global current_time, nodelist
 
     current_time = time.strftime(ISOTIMEFORMAT, time.localtime())
     dev.dump("./data/" + current_time + "hierarchy.xml")
@@ -126,11 +136,11 @@ def check_clicked():
     root = dom.documentElement
     nodelist = root.getElementsByTagName('node')
     nodelist = nodelist_redef(nodelist)
-    current_window = nodelist_judge_redef(nodelist)
+
     # num of nodes at new window is the width of the parent node
-    parent = is_new_window(current_window)
+    parent = is_new_window()
     #print 'parent'
-    print parent
+    #print parent
     #print ' .........'
 
     print clicked_list_width
