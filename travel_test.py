@@ -20,6 +20,51 @@ CMD_MAP = {
     'WAIT': lambda dev, arg: dev.wait.update()  # wait until window update event occurs
     }
 
+def DFS(node, nodelist):
+    if node not in nodelist:
+        nodelist.append(node)
+        print node
+        for i in node.childNodes:
+            DFS(i, nodelist)
+
+def node_details(node):
+    node_text = node.getAttribute('text')
+    node_resid = node.getAttribute('resource-id')
+    node_class = node.getAttribute('class')
+    node_package = node.getAttribute('package')
+    node_contentdesc = node.getAttribute('content-desc')
+    node_clickable = node.getAttribute('clickable')
+    node_bounds = node.getAttribute('bounds')
+    node_index = node.getAttribute('index')
+
+    if node.getAttribute('clickable') == 'true':
+        if node_class == 'android.widget.EditText':
+                continue
+
+        if node_package == package:
+            node = [node_text, node_contentdesc,
+                node_class, node_resid, node_package, node_clickable,
+                    node_bounds, node_index] # add width property
+
+    return node
+
+def travel_xml(root):
+
+def is_new_node(node):
+    # check whether is a new node
+
+
+def is_new_window(nodelist):
+    # whether is a new window
+    # if not: same_window++
+    # return the number nodes have not been clicked
+
+def is_samewindow_similar_parent(node, parent):
+
+def samewindow_threshold():
+
+
+
 def nodelist_redef(nodelist):
     # only retrieve GUI components belong to target pkg
     # and only interested attributes enough to figure out the unique one
@@ -32,22 +77,7 @@ def nodelist_redef(nodelist):
             print "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTOPIC"
             print node.getAttribute('text')
             flag = False
-        if node.getAttribute('clickable') == 'true':
-            # node_index = node.getAttribute('index')
-            node_text = node.getAttribute('text')
-            node_resid = node.getAttribute('resource-id')
-            node_class = node.getAttribute('class')
-            if node_class == 'android.widget.EditText':
-                continue
-            node_package = node.getAttribute('package')
-            node_contentdesc = node.getAttribute('content-desc')
-            node_clickable = node.getAttribute('clickable')
-            node_bounds = node.getAttribute('bounds')
-            node_index = node.getAttribute('index')
-            if node_package == package:
-                node = [node_text, node_contentdesc,
-                    node_class, node_resid, node_package, node_clickable,
-                        node_bounds, node_index] # add width property
+
                 nodelist_new.append(node)
     return nodelist_new
 
@@ -247,5 +277,6 @@ while check_clicked() or back_counter <= 15:
 
     #print toc - tic
     tic = time.clock()
+
     pass
     #ui_interaction()

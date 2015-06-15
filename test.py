@@ -1,96 +1,332 @@
+#!/usr/bin/env python2
+#-*-encoding:utf-8-*-
+
 __author__ = 'hao'
-import Queue
-import subprocess
-import threading
-import thread
+from uiautomator import device as dev
+import xml.dom.minidom
+import os
+import time
+import difflib
 
-class AsynchronousFileReader(threading.Thread):
-    '''
-    Helper class to implement asynchronous reading of a file
-    in a separate thread. Pushes read lines on a queue to
-    be consumed in another thread.
-    '''
+CMD_MAP = {
+    'CLICK': lambda dev, arg: dev(**arg).click(),
+    'TOUCH': lambda dev, arg: dev.click(**arg),
+    'DRAG': lambda dev, arg: dev.drag(**arg),
+    'PRESS': lambda dev, arg: dev.press(**arg),
+    'WAIT': lambda dev, arg: dev.wait.update()  # wait until window update event occurs
+    }
 
-    def __init__(self, fd, queue):
-        assert isinstance(queue, Queue.Queue)
-        assert callable(fd.readline)
-        threading.Thread.__init__(self)
-        self._fd = fd
-        self._queue = queue
+def redef_node(node, childFlag):
+    node_text = node.getAttribute('text')
+    node_resid = node.getAttribute('resource-id')
+    node_class = node.getAttribute('class')
+    node_contentdesc = node.getAttribute('content-desc')
+    node_bounds = node.getAttribute('bounds')
+    node_bounds = node_bounds[1: len(node_bounds) - 1]
+    node_bounds = node_bounds.split('][')
+    node_bounds[0] = node_bounds[0].split(',')
+    node_bounds[0] = map(float, node_bounds[0])
+    node_bounds[1] = node_bounds[1].split(',')
+    node_bounds[1] = map(float, node_bounds[1])
+    node_size = [node_bounds[0][0] - node_bounds[1][0],
+                 node_bounds[0][1] - node_bounds[1][1]]
+    node_clickable = node.getAttribute('clickable')
+    if node_clickable == 'true' and childFlag:
+        return [None, -1]
 
-    def run(self):
-        '''The body of the tread: read lines and put them on the queue.'''
-        for line in iter(self._fd.readline, ''):
-            if flag:
+    node = [node_text, node_contentdesc,
+            node_class, node_resid,
+                    node_bounds, node_size]
+    # add relative attributes
+    value = 6
+    return [node, value]
+
+def BFS_clickable(node, node_dict):
+        global menu_flag
+        [node_attri, value] = redef_node(node, False)
+        node_dict['node_attri'] += node_attri
+        if node_attri[1] == 'More options':
+            menu_flag = True
+        node_dict['value'] += value
+        for i in node.childNodes:
+            [node_attric, value] = redef_node(i, True)
+            if value == -1:
+                node_dict['node_attri'] = node_attri
+                node_dict['value'] = -1
                 return
-            self._queue.put(line)
+            node_attric[4] = [[node_attri[4][0][0] - node_attric[4][0][0],
+                              node_attri[4][0][1] - node_attric[4][0][1]],
+                              [node_attri[4][1][0] - node_attric[4][1][0],
+                              node_attri[4][1][1] - node_attric[4][1][1]]]
+            node_dict['node_attri'] += node_attric
+            node_dict['value'] += value
 
-    def eof(self):
-        '''Check whether there is no more content to expect.'''
-        return not self.is_alive() and self._queue.empty()
+def is_same_node(node_dict1, node_dict2):
+    if abs(node_dict1['value'] - node_dict2['value']) >= 6:
+        return False
+    else:
+        error = 0
+        node_attri1 = node_dict1['node_attri']
+        node_attri2 = node_dict2['node_attri']
+        for i in range(len(node_attri1)):
+            if isinstance(node_attri1[i], float):
+                if not isinstance(node_attri2[i], float):
+                    error += 1
+                    continue
+                if abs(node_attri1[i][0] - node_attri2[i][0]) > 5 \
+                    or abs(node_attri1[i][1] - node_attri2[i][1]) > 5:
+                        error += 1
+                        continue
+            #if difflib.SequenceMatcher(None, str(node_attri1[i]).encode('ascii', 'replace'), str(node_attri2[i]).encode('ascii', 'replace')).ratio() < 0.5:
+            if node_attri1[i] != node_attri2[i]:
+                error += 1
+        #print 1 - float(error) / float(node_dict2['value'])
+        #print node_attri1
+        #print node_attri2
+        if 1 - float(error) / float(node_dict2['value']) > 0.9:
+            return True
+        else:
+            return False
 
-line = ''
-class pop_logcat(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
+def is_shown_before(node_dict):
+    global menu_flag, menu_index
+    for i in shown_clickable:
+        if is_same_node(node_dict, i):
+            node_dict['width'] = i['width']
+            return [shown_clickable.index(i), True]
+    shown_clickable.append(node_dict)
+    if menu_flag and menu_index == -1:
+        menu_index = len(shown_clickable) - 1
+    return [len(shown_clickable) - 1, False]
 
-    def run(self):
-         # add any command line arguments here.
-        process = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '|', 'grep', "My"],
-                stdout=subprocess.PIPE)
+def travel_clickable(node):
+    node_dict = {'node_attri': [], 'value': 0, 'width': 1, 'parent': 0}
+    BFS_clickable(node, node_dict)
+    return node_dict
 
-        # Launch the asynchronous readers of the process' stdout.
-        stdout_queue = Queue.Queue()
-        stdout_reader = AsynchronousFileReader(process.stdout, stdout_queue)
-        stdout_reader.start()
-        # Check the queues if we received some output (until there is nothing more to get).
-        counter = 0
-        while not stdout_reader.eof():
-            while not stdout_queue.empty():
-                if counter == 2:
-                    global flag
-                    flag = True
-                    return
-                counter += 1
-                global line
-                line = stdout_queue.get()
-                print line
-            #if counter == 2:
-             #   return
+def DFS_xml(node, nodelist, window, node_clk):
+    global parent_width, newnode_counter
+    if node not in nodelist:
+        nodelist.append(node)
+        for i in node.childNodes:
+            DFS_xml(i, nodelist, window, node_clk)
+        if node.getAttribute('clickable') == 'true'\
+                and node.getAttribute('package') == package:
+            node_dict = travel_clickable(node)
+            if node_dict['value'] == -1:
+                return
+            [index, before] = is_shown_before(node_dict)
+            window.append(index)
+            if not before:
+                print 'NEWWWWWWWWWWWWWWWWNODE'
+                newnode_counter += 1
+                parent_width += 1
+                counter = 2
+                if len(clk_seq):
+                    parent_index = clk_seq[len(clk_seq) - 1]
+                    node_dict['parent'] = parent_index
+                    parent = shown_clickable[parent_index]
+                    if parent_index > 0:
+                        parent['width'] += 1
+                    #while parent['parent'] == clk_seq[len(clk_seq) - counter]:
+                    while parent['parent']:
+                        print 'just add it !!!!!!!!!!!!!! on'
+                        #parent_index = clk_seq[len(clk_seq) - counter]
+                        parent_index = parent['parent']
+                        parent = shown_clickable[parent_index]
+                        if parent_index > 0:
+                            parent['width'] += 1
+                        counter += 1
+                        if len(clk_seq) - counter < 0:
+                            break
+            #print node_dict
+            #print node.getAttribute('text')
+            if node_dict['width'] > 0:
+                #parent_width += 1
+                # simple detect circles
+                if node_clk['index'] == -1:
+                    circlecounter = 0
+                    if len(clk_seq) > 6:
+                        tmp = []
+                        for i in range(0, 5):
+                            tmp.append(clk_seq[len(clk_seq) - i - 1])
+                        while index in tmp:
+                            tmp[tmp.index(index)] = -1
+                            circlecounter += 1
+                    if circlecounter > 1:
+                        tmp1 = -3
+                        tmp2 = -3
+                        if tmp.index(-1) + 1 < len(tmp):
+                            tmp1 = tmp[tmp.index(-1) + 1]
+                            tmp[tmp.index(-1)] = -2
+                            if tmp[tmp.index((-2)) + 1] == -1:
+                                print 'CCCCCCCCCCCCCCCCCCCIRCCCCCCCCCCCCCClHHHHHH'
+                                return
+                        if tmp.index(-1) + 1 < len(tmp):
+                            tmp2 = tmp[tmp.index(-1) + 1]
+                        if tmp1 != -3 and tmp2 != -3:
+                            if tmp1 != tmp2:
+                                node_clk['node'] = node
+                                node_clk['index'] = index
+                            else:
+                                print 'CCCCCCCCCCCCCCCCCCCIRCCCCCCCCCCCCCCl'
+                        else:
+                            node_clk['node'] = node
+                            node_clk['index'] = index
+                    #if circlecounter < 2:
+                    else:
+                        node_clk['node'] = node
+                        node_clk['index'] = index
+                    # or 3 times shown in total 8 times
 
 
+def is_same_window(window1, window2):
+    if difflib.SequenceMatcher(None, str(window1), str(window2)).ratio() > 0.9:
+        return True
 
-class mytest2(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
+def handle_window():
+    #dev.wait.idle()
+    global samewindow, clk_seq, priwindow, back_counter, parent_width, newnode_counter
+    global menu_index, menu_flag
+    current_time = time.strftime(ISOTIMEFORMAT, time.localtime())
+    dev.dump("./data/" + current_time + "hierarchy.xml")
+    dom = xml.dom.minidom.parse("./data/" + current_time + "hierarchy.xml")
+    root = dom.documentElement
+    nodelist = []
+    node_clk = {'node': None, 'index': -1}
+    window = []
+    parent_width = 0
+    newnode_counter = 0
+    menu_flag = False
+    DFS_xml(root, nodelist, window, node_clk)
+    if newnode_counter > 3 and menu_flag:
+        # indicates new window
+        print 'MENU FOUND>>>>>>>>>>>>>'
+        if shown_clickable[menu_index]['width'] == 0:
+            shown_clickable[menu_index]['width'] += 1
+            print 'MMMMMMMMMMMMMMMMMMMMMMMMMENU AGAINNNNNNNN'
 
-    def run(self):
-        #global line
-        while 1:
-            if line != line:
-                print line
+    #print node_clk['index']
+    print window
+    #print shown_clickable
+    print clk_seq
 
-# clickflag => read buffer => do click
+    if len(clk_seq):
+        prinode_index = clk_seq[len(clk_seq) - 1]
+        prinode = shown_clickable[prinode_index]
+        print parent_width
 
-flag = False
-c = pop_logcat()
-c.start()
-c.join()
-print flag
-p = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '-c'],
-                    stdout=subprocess.PIPE)
-p.wait()
-c = pop_logcat()
-c.start()
-c.join()
-print flag
-# flag = True
-#cs = mytest2()
-#cs.start()
-#while 1:
- #   pass
-# while not stdout_reader.eof():
-#         while not stdout_queue.empty():
-#             #global line
-#             line = stdout_queue.get()
-#             print line
+    # if not is_same_window(window, priwindow):
+    #     flag = 0
+    #     for i in window_list:
+    #         if is_same_window(window, i):
+    #             flag = 1
+    #             break
+    #     if flag == 0:
+    #         window_list.append(window)
+    # else:
+    #     samewindow += 1
+    #print node_clk['index']
+    #priwindow = window
+    if node_clk['index'] != -1:
+        node = shown_clickable[node_clk['index']]
+        ui_interaction(node_clk['node'], current_time)
+        print node['node_attri']
+        node['width'] -= 1
+        if clk_seq:
+            parent_index = node['parent']
+            parent = shown_clickable[parent_index]
+            parent['width'] -= 1
+            while parent['parent']:
+                parent_index = parent['parent']
+                parent = shown_clickable[parent_index]
+                parent['width'] -= 1
+                print 'just do it !!!!!!!!!!!!!! on '
+                print parent_index
+
+        clk_seq.append(node_clk['index'])
+        return True
+    else:
+        #clk_seq.append(-1)
+        dev.press.back()
+        print 'back'
+        prinode['width'] = 0
+        back_counter += 1
+        return False
+
+def get_touch_attributes(node):
+    attributes = dict()
+    node_bounds = node.getAttribute('bounds')
+    node_bounds = node_bounds[1: len(node_bounds) - 1]
+    node_bounds = node_bounds.split('][')
+    node_bounds[0] = node_bounds[0].split(',')
+    node_bounds[0] = map(float, node_bounds[0])
+    node_bounds[1] = node_bounds[1].split(',')
+    node_bounds[1] = map(float, node_bounds[1])
+    print node_bounds[0]
+    print node_bounds[1]
+    attributes['x'] = 0.5 * (node_bounds[1][0] - node_bounds[0][0]) + node_bounds[0][0]
+    attributes['y'] = 0.5 * (node_bounds[1][1] - node_bounds[0][1]) + node_bounds[0][1]
+    print attributes['x']
+    print attributes['y']
+    return attributes
+
+def get_selector_attributes(node):
+    attributes = dict()
+    if node.getAttribute('text') != '':
+        attributes['text'] = node.getAttribute('text')
+    #if node[1] != '':
+        # print node[1]
+        # attributes['description'] = node[1] # for clock, its description change frequently
+    if node.getAttribute('content-desc') != '':
+        attributes['description'] = node.getAttribute('content-desc')
+    if node.getAttribute('class') != '':
+        attributes['className'] = node.getAttribute('class')
+    if node.getAttribute('resource-id') != '':
+        attributes['resourceId'] = node.getAttribute('resource-id')
+    # attributes['bounds'] = node[6]
+    attributes['index'] = node.getAttribute('index')
+    return attributes
+
+def ui_interaction(node_clk, current_time):
+    arg = get_selector_attributes(node_clk)
+    if not dev(**arg).exists:
+        print 'not found'
+        return
+    #cmd = 'CLICK'
+
+    print arg
+    dev.wait.idle()
+    if not dev(**arg).exists:
+        print 'not found'
+        return
+    arg = get_touch_attributes(node_clk)
+    cmd = 'TOUCH'
+    CMD_MAP[cmd](dev, arg)
+    print 'click ' + node_clk.getAttribute('resource-id') + ' at ' + current_time
+
+print dev.info
+dev.screen.on()
+os.system('rm -r -f data')
+os.system('mkdir data')
+#package = 'com.android.deskclock'
+package = 'com.android.settings'
+ISOTIMEFORMAT = '%m%d-%H-%M-%S'
+shown_clickable = []
+clk_seq = []
+window_list = []
+samewindow = 0
+priwindow = []
+parent_width = 0
+back_counter = 0
+menu_index = -1
+# set threashold large to check behaviors underware
+while handle_window() or back_counter <= 100:
+    time.sleep(3)
+    suck = []
+    for i in shown_clickable:
+        suck.append(i['width'])
+    print 'width:'
+    print suck
+    print menu_index
+    pass
