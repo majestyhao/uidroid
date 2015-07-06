@@ -2,7 +2,7 @@ __author__ = 'hao'
 import Queue
 import subprocess
 import threading
-import thread
+import re
 
 class AsynchronousFileReader(threading.Thread):
     '''
@@ -35,8 +35,9 @@ class pop_logcat(threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
+        global series,line, flag
          # add any command line arguments here.
-        process = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '|', 'grep', "My"],
+        process = subprocess.Popen(['adb', '-s', series, 'logcat', '|', 'grep', 'UiDroid'],
                 stdout=subprocess.PIPE)
 
         # Launch the asynchronous readers of the process' stdout.
@@ -47,13 +48,12 @@ class pop_logcat(threading.Thread):
         counter = 0
         while not stdout_reader.eof():
             while not stdout_queue.empty():
-                if counter == 2:
-                    global flag
+                if counter == 100:
                     flag = True
                     return
                 counter += 1
-                global line
                 line = stdout_queue.get()
+                print int(re.search((r'\d+'), line).group())
                 print line
             #if counter == 2:
              #   return
@@ -68,16 +68,19 @@ class mytest2(threading.Thread):
         #global line
         while 1:
             if line != line:
+                line = line.split(', ')
                 print line
 
 # clickflag => read buffer => do click
-
+#series = '014E233C1300800B'
+series = '01b7006e13dd12a1'
 flag = False
 c = pop_logcat()
 c.start()
 c.join()
 print flag
-p = subprocess.Popen(['adb', '-s', '014E233C1300800B', 'logcat', '-c'],
+
+p = subprocess.Popen(['adb', '-s', series, 'logcat', '-c'],
                     stdout=subprocess.PIPE)
 p.wait()
 c = pop_logcat()
