@@ -116,7 +116,7 @@ def travel_clickable(node):
     BFS_clickable(node, node_dict)
     return node_dict
 
-# deepth-first search in xml
+# depth-first search in xml
 def DFS_xml(node, nodelist, window, node_clk):
     global parent_width, newnode_counter, press_menu
     if node not in nodelist:
